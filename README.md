@@ -6,6 +6,10 @@ A simple chat P2P using NodeJS
 
 [**Checkout** the proposal (.pdf)](/proposal/Seguran_a___APNP___Atividade_2-1.pdf)
 
+## Feature
+
+1. Auth by unique nickname
+
 ## Reports
 
 1. [Introduction](/reports/README.md)
@@ -42,6 +46,20 @@ npm run client
 *Default server ip and port: 127.0.0.1:5535*
 
 
-### Author 
+## Contributing
+
+### Developing
+
+Server
+```bash
+npm run dev:server
+```
+
+Client
+```bash
+npm run dev:client
+```
+
+## Author 
 
 - Guilherme Henrique G Oliveira (UTFPR RA: 1913298)
