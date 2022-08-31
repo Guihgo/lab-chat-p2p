@@ -86,6 +86,20 @@ class ChatCLI {
                     client.setNickname(await inputNickname())
                     client.init()
                 }
+            },
+            onLoggedIn: async ()=>{
+                const { message } = await inquirer.prompt([
+                    { type: "input", name: "message", message: `[${client.config.nickname}]:`, prefix: CHAT_CLIENT_PREFIX },
+                ])
+                client.sendMessage(message)
+                while(1) {
+                    await client.config.onLoggedIn()
+                }
+            },
+            onReceive: async (payload)=>{
+                process.stdout.clearLine(-1)
+                process.stdout.cursorTo(0)
+                console.log(`${CHAT_CLIENT_PREFIX} ${payload.from}: ${payload.message}`)
             }
         })
         client.init()

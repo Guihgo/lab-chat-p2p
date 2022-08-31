@@ -9,6 +9,7 @@ A simple chat P2P using NodeJS
 ## Feature
 
 1. Auth by unique nickname
+2. P2P Chat
 
 ## Reports
 
@@ -46,9 +47,7 @@ npm run client
 *Default server ip and port: 127.0.0.1:5535*
 
 
-## Contributing
-
-### Developing
+## Developing
 
 Server
 ```bash
@@ -59,6 +58,20 @@ Client
 ```bash
 npm run dev:client
 ```
+
+Building
+```bash
+npm run build
+```
+
+## Contributing
+
+1. Fork this repo
+2. Create Pull Request
+
+## TODO
+
+- Multiple rooms
 
 ## Author 
 

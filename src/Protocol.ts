@@ -1,7 +1,22 @@
 export enum OP {
     AUTH = "AUTH",
     SYNC = "SYNC",
-    SEND = "SEND"
+    SEND = "SEND",
+    RECEIVE = "RECEIVE",
+    ERROR = "ERROR"
+}
+
+export interface OPAuthPayload {
+    nickname: string
+    publicKey: string
+}
+export interface OPReceivePayload {
+    from: string,
+    message: string
+}
+export interface OPErrorPayload {
+    message: string
+    code: ERROR_CODE,
 }
 
 export enum ERROR_CODE {
@@ -27,6 +42,9 @@ export function ParsePayload(data: Buffer): {
     switch (op) {
         case OP.AUTH:
             operation = OP.AUTH
+            break
+        case OP.ERROR:
+            operation = OP.ERROR
             break
         case OP.SYNC:
             operation = OP.SYNC
