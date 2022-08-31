@@ -10,34 +10,48 @@ export interface OPAuthPayload {
     publicKey: string
 }
 export interface OPSendPayload {
-    from: string,
+    from: string
     message: string
 }
 export interface OPErrorPayload {
     message: string
-    code: ERROR_CODE,
+    code: ERROR_CODE
+}
+export interface OPHandShakePayload {
+    issuer?: string
+    publicKey?: string
+    symmetricKey?: string
 }
 
 export enum ERROR_CODE {
     NICKNAME_ALREADY_TAKEN = "NICKNAME_ALREADY_TAKEN"
 }
 
-export function GetPayload(operation: OP, payload: any): Buffer {
-    return Buffer.from(`${operation}=${JSON.stringify(payload)}`)
+export function GetPayload(operation: OP, data: any, ...middlwares: Array<(op: OP, data: string) => string>): Buffer {
+    
+    data = JSON.stringify(data)
+    
+    middlwares.forEach(middlware => {
+        data = middlware(operation, data)
+    })
+
+    return Buffer.from(`${operation}=${data}`)
+
+
 }
 
-export function ParsePayload(data: Buffer): {
+export function ParsePayload(payload: Buffer, ...middlwares: Array<(op: OP, data: string) => string>): {
     operation: OP,
-    payload: any
+    data: any
 } {
-    const dataAsString = data.toString()
+    const payloadAsString = payload.toString()
 
-    const equalsIndex = dataAsString.indexOf("=")
+    const equalsIndex = payloadAsString.indexOf("=")
 
     if (equalsIndex === -1) throw new Error("Invalid data")
 
-    const op = dataAsString.slice(0, equalsIndex)
-    let operation : OP = null
+    const op = payloadAsString.slice(0, equalsIndex)
+    let operation: OP = null
     switch (op) {
         case OP.AUTH:
             operation = OP.AUTH
@@ -51,16 +65,21 @@ export function ParsePayload(data: Buffer): {
         case OP.SEND:
             operation = OP.SEND
             break
-        default: 
+        default:
             throw new Error("Operation not implemented")
     }
-
     try {
+        let data = payloadAsString.slice(equalsIndex + 1)
+
+        middlwares.forEach(middlware => {
+            data = middlware(operation, data)
+        })
+
         return {
             operation,
-            payload: JSON.parse(dataAsString.slice(equalsIndex+1))
+            data: JSON.parse(data)
         }
-    } catch (e){
+    } catch (e) {
         throw new Error(e)
     }
 }

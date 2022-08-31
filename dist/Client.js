@@ -18,6 +18,8 @@ class ChatClient {
     constructor(config) {
         this.config = config;
         this.keyPair = { privateKey: null, publicKey: null };
+        this.symmetricKey = null;
+        this.config.passphrase = config.passphrase || "private_key_passphrase";
     }
     init() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -50,10 +52,12 @@ class ChatClient {
     onServerData(data) {
         // console.log(`${CHAT_CLIENT_PREFIX} Server Data`)
         try {
-            const { operation, payload } = (0, Protocol_1.ParsePayload)(data);
+            const { operation, data: payload } = (0, Protocol_1.ParsePayload)(data, this.decryptSymmetric.bind(this));
             switch (operation) {
                 case Protocol_1.OP.AUTH:
                     console.log(`${exports.CHAT_CLIENT_PREFIX} ${payload.message}`);
+                    if (!this.symmetricKey)
+                        this.server.write((0, Protocol_1.GetPayload)(Protocol_1.OP.HANDSHAKE, {}));
                     if (this.config.onLoggedIn)
                         this.config.onLoggedIn();
                     break;
@@ -70,6 +74,9 @@ class ChatClient {
                 case Protocol_1.OP.SEND:
                     if (this.config.onReceive)
                         this.config.onReceive(payload);
+                    break;
+                case Protocol_1.OP.HANDSHAKE:
+                    this.handShake(payload);
                     break;
             }
         }
@@ -91,7 +98,7 @@ class ChatClient {
     sendMessage(message) {
         this.server.write((0, Protocol_1.GetPayload)(Protocol_1.OP.SEND, { from: this.config.nickname, message }));
     }
-    generateKeyPair(passphrase = "private_key_passphrase") {
+    generateKeyPair() {
         const options = {
             modulusLength: 2048,
             publicKeyEncoding: {
@@ -102,7 +109,7 @@ class ChatClient {
                 type: "pkcs8",
                 format: "pem",
                 cipher: "aes-256-cbc",
-                passphrase
+                passphrase: this.config.passphrase
             }
         };
         return new Promise((resolve, reject) => {
@@ -117,6 +124,40 @@ class ChatClient {
                 });
             });
         });
+    }
+    handShake(payload) {
+        if (payload.issuer && payload.publicKey) {
+            /* encrypt symmetric key with issuer public key  */
+            const encryptedData = (0, crypto_1.publicEncrypt)(payload.publicKey, Buffer.from(this.symmetricKey));
+            this.server.write((0, Protocol_1.GetPayload)(Protocol_1.OP.HANDSHAKE, {
+                issuer: payload.issuer,
+                symmetricKey: encryptedData.toString("hex")
+            }));
+            return;
+        }
+        if (payload.issuer && payload.symmetricKey) {
+            // this.roomKey = decryptAssymmetric(payload.symmetricKey)
+            const decryptedData = (0, crypto_1.privateDecrypt)({
+                key: this.keyPair.privateKey,
+                passphrase: this.config.passphrase,
+            }, Buffer.from(payload.symmetricKey, "hex"));
+            this.symmetricKey = decryptedData.toString();
+            console.log(exports.CHAT_CLIENT_PREFIX, "HandShaked SymmetricKey: ", decryptedData.toString());
+            return;
+        }
+        this.symmetricKey = (0, crypto_1.randomBytes)(32).toString("hex");
+        console.log(exports.CHAT_CLIENT_PREFIX, "Generated SymmetricKey: ", this.symmetricKey);
+    }
+    encryptSymetric(op, data) {
+    }
+    decryptSymmetric(op, data) {
+        if (this.symmetricKey !== null && op === Protocol_1.OP.SEND) {
+            console.log("symmetric decrypt");
+            return data;
+        }
+        else {
+            return data;
+        }
     }
 }
 exports.ChatClient = ChatClient;

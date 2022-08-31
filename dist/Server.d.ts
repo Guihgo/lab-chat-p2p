@@ -1,5 +1,6 @@
 /// <reference types="node" />
 import { SocketAddress, Server, Socket } from "net";
+import { OPHandShakePayload } from "./Protocol";
 export declare const CHAT_SERVER_PREFIX = "[Chat::Server]\t";
 export interface ServerConfig {
     socketAddress: SocketAddress;
@@ -26,9 +27,11 @@ export declare class ChatServer {
     onClientError(e: any, socket: Socket): void;
     connectionListener(socket: Socket): void;
     getClientId(socket: Socket): string;
+    getClient(nickname: string): Client;
     authClient(client: Client): void;
     sendMessage(from: Client["nickname"], { message }: {
         message: any;
     }): void;
+    handShake(client: Client, payload?: OPHandShakePayload): void;
 }
 export {};

@@ -1,5 +1,5 @@
 import { SocketAddress, createServer, Server, Socket } from "net"
-import { ERROR_CODE, GetPayload, OP, OPAuthPayload, OPErrorPayload, OPSendPayload, ParsePayload } from "./Protocol"
+import { ERROR_CODE, GetPayload, OP, OPAuthPayload, OPErrorPayload, OPHandShakePayload, OPSendPayload, ParsePayload } from "./Protocol"
 
 
 export const CHAT_SERVER_PREFIX = "[Chat::Server]\t"
@@ -73,7 +73,7 @@ export class ChatServer {
             // console.log(`${CHAT_SERVER_PREFIX} Data from ${socket.remoteAddress}:${socket.remotePort}`)
 
             try {
-                const { operation, payload } = ParsePayload(data)
+                const { operation, data: payload } = ParsePayload(data)
                 switch (operation) {
                     case OP.AUTH:
                         if (!(payload as OPAuthPayload).nickname) throw new Error("No nickname defined.")
@@ -86,6 +86,9 @@ export class ChatServer {
                     case OP.SEND:
                         this.sendMessage(this.genesisRoom.clients[this.getClientId(socket)].nickname, payload)
                         break
+                    case OP.HANDSHAKE:
+                        this.handShake(this.genesisRoom.clients[this.getClientId(socket)], payload)
+                        break
                 }
             } catch (e) {
                 console.error(`${CHAT_SERVER_PREFIX} Client Data Error`, e)
@@ -93,13 +96,17 @@ export class ChatServer {
         })
     }
 
-    getClientId(socket: Socket) {
+    getClientId(socket: Socket) : string {
         return `${socket.remoteAddress}:${socket.remotePort}`
+    }
+
+    getClient(nickname: string) : Client {
+        return this.genesisRoom.clients[Object.keys(this.genesisRoom.clients).find(k => (this.genesisRoom.clients[k].nickname === nickname))]
     }
 
     authClient(client: Client) {
         const id = this.getClientId(client.socket)
-        if (Object.keys(this.genesisRoom.clients).find(k => (this.genesisRoom.clients[k].nickname === client.nickname))) {
+        if (this.getClient(client.nickname)) {
             console.error(`${CHAT_SERVER_PREFIX} Client ${id} trying to use already taken nickname @${client.nickname}`)
             client.socket.write(GetPayload(OP.ERROR, { message: "Nickname already taken", code: ERROR_CODE.NICKNAME_ALREADY_TAKEN } as OPErrorPayload))
             return
@@ -120,5 +127,24 @@ export class ChatServer {
                 message
             } as OPSendPayload))
         })
+    }
+
+    handShake(client: Client, payload?: OPHandShakePayload) {
+        if (payload && payload.issuer && payload.symmetricKey) {
+            this.getClient(payload.issuer).socket.write(GetPayload(OP.HANDSHAKE, payload))
+            return
+        }
+
+        if (Object.keys(this.genesisRoom.clients).length<=1) {
+            client.socket.write(GetPayload(OP.HANDSHAKE, {} as OPHandShakePayload))
+            return
+        }
+        
+        /* handshake to first (owner room) to get room key */
+        let resolverHandShake = this.genesisRoom.clients[Object.keys(this.genesisRoom.clients)[0]]
+        // if (resolverHandShake.nickname === client.nickname) resolverHandShake = this.genesisRoom.clients[Object.keys(this.genesisRoom.clients)[1]]
+        console.log(`${CHAT_SERVER_PREFIX} @${client.nickname} is asking for symetric key. @${resolverHandShake.nickname} will help him!`)
+        resolverHandShake.socket.write(GetPayload(OP.HANDSHAKE, { issuer: client.nickname , publicKey: client.publicKey } as OPHandShakePayload))
+
     }
 }

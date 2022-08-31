@@ -54,7 +54,7 @@ class ChatServer {
         socket.on("data", (data) => {
             // console.log(`${CHAT_SERVER_PREFIX} Data from ${socket.remoteAddress}:${socket.remotePort}`)
             try {
-                const { operation, payload } = (0, Protocol_1.ParsePayload)(data);
+                const { operation, data: payload } = (0, Protocol_1.ParsePayload)(data);
                 switch (operation) {
                     case Protocol_1.OP.AUTH:
                         if (!payload.nickname)
@@ -68,6 +68,9 @@ class ChatServer {
                     case Protocol_1.OP.SEND:
                         this.sendMessage(this.genesisRoom.clients[this.getClientId(socket)].nickname, payload);
                         break;
+                    case Protocol_1.OP.HANDSHAKE:
+                        this.handShake(this.genesisRoom.clients[this.getClientId(socket)], payload);
+                        break;
                 }
             }
             catch (e) {
@@ -78,9 +81,12 @@ class ChatServer {
     getClientId(socket) {
         return `${socket.remoteAddress}:${socket.remotePort}`;
     }
+    getClient(nickname) {
+        return this.genesisRoom.clients[Object.keys(this.genesisRoom.clients).find(k => (this.genesisRoom.clients[k].nickname === nickname))];
+    }
     authClient(client) {
         const id = this.getClientId(client.socket);
-        if (Object.keys(this.genesisRoom.clients).find(k => (this.genesisRoom.clients[k].nickname === client.nickname))) {
+        if (this.getClient(client.nickname)) {
             console.error(`${exports.CHAT_SERVER_PREFIX} Client ${id} trying to use already taken nickname @${client.nickname}`);
             client.socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.ERROR, { message: "Nickname already taken", code: Protocol_1.ERROR_CODE.NICKNAME_ALREADY_TAKEN }));
             return;
@@ -99,6 +105,21 @@ class ChatServer {
                 message
             }));
         });
+    }
+    handShake(client, payload) {
+        if (payload && payload.issuer && payload.symmetricKey) {
+            this.getClient(payload.issuer).socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.HANDSHAKE, payload));
+            return;
+        }
+        if (Object.keys(this.genesisRoom.clients).length <= 1) {
+            client.socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.HANDSHAKE, {}));
+            return;
+        }
+        /* handshake to first (owner room) to get room key */
+        let resolverHandShake = this.genesisRoom.clients[Object.keys(this.genesisRoom.clients)[0]];
+        // if (resolverHandShake.nickname === client.nickname) resolverHandShake = this.genesisRoom.clients[Object.keys(this.genesisRoom.clients)[1]]
+        console.log(`${exports.CHAT_SERVER_PREFIX} @${client.nickname} is asking for symetric key. @${resolverHandShake.nickname} will help him!`);
+        resolverHandShake.socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.HANDSHAKE, { issuer: client.nickname, publicKey: client.publicKey }));
     }
 }
 exports.ChatServer = ChatServer;

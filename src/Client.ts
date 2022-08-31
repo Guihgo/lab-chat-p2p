@@ -1,13 +1,14 @@
-import { generateKeyPair, RSAKeyPairOptions } from "crypto"
+import { generateKeyPair, privateDecrypt, publicEncrypt, randomBytes, RSAKeyPairOptions } from "crypto"
 import { SocketAddress, Socket } from "net"
-import { ERROR_CODE, GetPayload, OP, OPAuthPayload, OPErrorPayload, OPSendPayload, ParsePayload } from "./Protocol"
+import { ERROR_CODE, GetPayload, OP, OPAuthPayload, OPErrorPayload, OPHandShakePayload, OPSendPayload, ParsePayload } from "./Protocol"
 
 export const CHAT_CLIENT_PREFIX = "[Chat::Client]\t"
 
 export interface ClientConfig {
-    serverAddress: SocketAddress,
-    nickname: string,
-    onAuthError?: (e: ERROR_CODE) => any,
+    serverAddress: SocketAddress
+    nickname: string
+    passphrase?: string
+    onAuthError?: (e: ERROR_CODE) => any
     onLoggedIn?: () => any
     onReceive?: (payload: OPSendPayload) => any
 }
@@ -23,7 +24,11 @@ export class ChatClient {
 
     protected keyPair : KeyPair = {privateKey: null, publicKey: null}
 
-    constructor(public config: ClientConfig) { }
+    protected symmetricKey : string = null
+
+    constructor(public config: ClientConfig) {
+        this.config.passphrase = config.passphrase || "private_key_passphrase"
+    }
 
     async init() {
         this.server = new Socket()
@@ -62,12 +67,15 @@ export class ChatClient {
         // console.log(`${CHAT_CLIENT_PREFIX} Server Data`)
 
         try {
-            const { operation, payload } = ParsePayload(data)
+
+            const { operation, data: payload } = ParsePayload(data, this.decryptSymmetric.bind(this))
 
             switch (operation) {
                 case OP.AUTH:
                     console.log(`${CHAT_CLIENT_PREFIX} ${payload.message}`)
+                    if (!this.symmetricKey) this.server.write(GetPayload(OP.HANDSHAKE, {} as OPHandShakePayload))
                     if (this.config.onLoggedIn) this.config.onLoggedIn()
+                    
                     break
                 case OP.ERROR: 
                     console.error(`${CHAT_CLIENT_PREFIX} Error. Server says: ${payload.message}`)
@@ -80,6 +88,9 @@ export class ChatClient {
                     break
                 case OP.SEND:
                     if (this.config.onReceive) this.config.onReceive(payload)
+                    break
+                case OP.HANDSHAKE:
+                    this.handShake((payload as OPHandShakePayload))                    
                     break
             }
         } catch (e) {
@@ -102,7 +113,7 @@ export class ChatClient {
         this.server.write(GetPayload(OP.SEND, { from: this.config.nickname, message } as OPSendPayload))
     }
 
-    generateKeyPair(passphrase = "private_key_passphrase"): Promise<KeyPair> {
+    generateKeyPair(): Promise<KeyPair> {
         const options: RSAKeyPairOptions<"pem", "pem"> = {
             modulusLength: 2048,
             publicKeyEncoding: {
@@ -113,7 +124,7 @@ export class ChatClient {
                 type: "pkcs8",
                 format: "pem",
                 cipher: "aes-256-cbc",
-                passphrase
+                passphrase: this.config.passphrase
             }
         }
 
@@ -128,6 +139,46 @@ export class ChatClient {
                 })
             })
         })
+    }
 
+    handShake(payload?: OPHandShakePayload) {
+        if (payload.issuer && payload.publicKey) {
+            /* encrypt symmetric key with issuer public key  */
+            const encryptedData = publicEncrypt(payload.publicKey, Buffer.from(this.symmetricKey))
+
+            this.server.write(GetPayload(OP.HANDSHAKE, {
+                issuer: payload.issuer,
+                symmetricKey: encryptedData.toString("hex")
+            } as OPHandShakePayload))
+            return
+        }
+
+        if ((payload as OPHandShakePayload).issuer && (payload as OPHandShakePayload).symmetricKey) {
+            // this.roomKey = decryptAssymmetric(payload.symmetricKey)
+            const decryptedData = privateDecrypt({
+                key: this.keyPair.privateKey,
+                passphrase: this.config.passphrase,
+            }, Buffer.from((payload as OPHandShakePayload).symmetricKey, "hex"))
+            this.symmetricKey = decryptedData.toString()
+            console.log(CHAT_CLIENT_PREFIX, "HandShaked SymmetricKey: ", decryptedData.toString())
+            return
+        }
+
+        this.symmetricKey = randomBytes(32).toString("hex")
+        console.log(CHAT_CLIENT_PREFIX, "Generated SymmetricKey: ", this.symmetricKey)
+    }
+
+    encryptSymetric(op: OP, data: string) {
+
+    }
+
+    decryptSymmetric(op: OP, data:string) : string {
+        if (this.symmetricKey !== null && op === OP.SEND) {
+            console.log("symmetric decrypt")
+            return data
+        } else {
+            return data
+        }
+        
     }
 }

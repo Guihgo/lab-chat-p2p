@@ -17,11 +17,16 @@ export interface OPErrorPayload {
     message: string;
     code: ERROR_CODE;
 }
+export interface OPHandShakePayload {
+    issuer?: string;
+    publicKey?: string;
+    symmetricKey?: string;
+}
 export declare enum ERROR_CODE {
     NICKNAME_ALREADY_TAKEN = "NICKNAME_ALREADY_TAKEN"
 }
-export declare function GetPayload(operation: OP, payload: any): Buffer;
-export declare function ParsePayload(data: Buffer): {
+export declare function GetPayload(operation: OP, data: any, ...middlwares: Array<(op: OP, data: string) => string>): Buffer;
+export declare function ParsePayload(payload: Buffer, ...middlwares: Array<(op: OP, data: string) => string>): {
     operation: OP;
-    payload: any;
+    data: any;
 };
