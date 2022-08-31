@@ -1,16 +1,34 @@
 /// <reference types="node" />
 import { SocketAddress, Server, Socket } from "net";
 export declare const CHAT_SERVER_PREFIX = "[Chat::Server]\t";
-interface ServerConfig {
+export interface ServerConfig {
     socketAddress: SocketAddress;
+}
+interface Client {
+    socket: Socket;
+    nickname: string;
+    publicKey: string;
+}
+interface Room {
+    name: string;
+    clients: {
+        [id: string]: Client;
+    };
 }
 export declare class ChatServer {
     config: ServerConfig;
     server: Server;
+    genesisRoom: Room;
+    rooms: Array<Room>;
     constructor(config: ServerConfig);
     init(): Promise<void>;
     onServerError(e: any): void;
     onClientError(e: any, socket: Socket): void;
     connectionListener(socket: Socket): void;
+    getClientId(socket: Socket): string;
+    authClient(client: Client): void;
+    sendMessage(from: Client["nickname"], { message }: {
+        message: any;
+    }): void;
 }
 export {};

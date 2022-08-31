@@ -35,13 +35,13 @@ yarn
 ### Start server
 
 ```bash
-npm run server
+node dist/cli.js server
 ```
 
 ### Start n clients
 
 ```bash
-npm run client
+node dist/cli.js client
 ```
 
 *Default server ip and port: 127.0.0.1:5535*

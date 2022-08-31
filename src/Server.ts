@@ -1,5 +1,5 @@
 import { SocketAddress, createServer, Server, Socket } from "net"
-import { ERROR_CODE, GetPayload, OP, OPAuthPayload, OPErrorPayload, OPReceivePayload, ParsePayload } from "./Protocol"
+import { ERROR_CODE, GetPayload, OP, OPAuthPayload, OPErrorPayload, OPSendPayload, ParsePayload } from "./Protocol"
 
 
 export const CHAT_SERVER_PREFIX = "[Chat::Server]\t"
@@ -11,7 +11,7 @@ export interface ServerConfig {
 interface Client {
     socket: Socket
     nickname: string
-    publicKey?: string | Buffer
+    publicKey: string
 }
 
 interface Room {
@@ -104,7 +104,7 @@ export class ChatServer {
             client.socket.write(GetPayload(OP.ERROR, { message: "Nickname already taken", code: ERROR_CODE.NICKNAME_ALREADY_TAKEN } as OPErrorPayload))
             return
         }
-
+        
         this.genesisRoom.clients[id] = client
         client.socket.write(GetPayload(OP.AUTH, { message: `Logged as @${client.nickname} with success!` }))
         console.log(`${CHAT_SERVER_PREFIX} Client ${client.nickname}@${client.socket.remoteAddress}:${client.socket.remotePort} logged in. Now: ${Object.keys(this.genesisRoom.clients).length} clients.`, Object.keys(this.genesisRoom.clients).map(k => `${this.genesisRoom.clients[k].nickname}@${k}`))
@@ -118,7 +118,7 @@ export class ChatServer {
             client.socket.write(GetPayload(OP.SEND, {
                 from,
                 message
-            } as OPReceivePayload))
+            } as OPSendPayload))
         })
     }
 }

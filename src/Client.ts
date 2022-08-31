@@ -1,5 +1,6 @@
+import { generateKeyPair, RSAKeyPairOptions } from "crypto"
 import { SocketAddress, Socket } from "net"
-import { ERROR_CODE, GetPayload, OP, OPAuthPayload, OPErrorPayload, OPReceivePayload, ParsePayload } from "./Protocol"
+import { ERROR_CODE, GetPayload, OP, OPAuthPayload, OPErrorPayload, OPSendPayload, ParsePayload } from "./Protocol"
 
 export const CHAT_CLIENT_PREFIX = "[Chat::Client]\t"
 
@@ -8,12 +9,19 @@ export interface ClientConfig {
     nickname: string,
     onAuthError?: (e: ERROR_CODE) => any,
     onLoggedIn?: () => any
-    onReceive?: (payload: OPReceivePayload) => any
+    onReceive?: (payload: OPSendPayload) => any
+}
+
+interface KeyPair {
+    publicKey: string,
+    privateKey: string
 }
 
 export class ChatClient {
 
     public server: Socket
+
+    protected keyPair : KeyPair = {privateKey: null, publicKey: null}
 
     constructor(public config: ClientConfig) { }
 
@@ -23,6 +31,8 @@ export class ChatClient {
 
         this.server.on("error", this.onServerError.bind(this))
         this.server.on("data", this.onServerData.bind(this))
+
+        await this.generateKeyPair()
 
         this.server.connect({
             host: this.config.serverAddress.address,
@@ -79,7 +89,8 @@ export class ChatClient {
 
     async auth() {
         this.server.write(GetPayload(OP.AUTH, {
-            nickname: this.config.nickname
+            nickname: this.config.nickname,
+            publicKey: this.keyPair.publicKey
         } as OPAuthPayload))
     }
 
@@ -88,6 +99,35 @@ export class ChatClient {
     }
 
     sendMessage(message: string) {
-        this.server.write(GetPayload(OP.SEND, { message }))
+        this.server.write(GetPayload(OP.SEND, { from: this.config.nickname, message } as OPSendPayload))
+    }
+
+    generateKeyPair(passphrase = "private_key_passphrase"): Promise<KeyPair> {
+        const options: RSAKeyPairOptions<"pem", "pem"> = {
+            modulusLength: 2048,
+            publicKeyEncoding: {
+                type: "spki",
+                format: "pem"
+            },
+            privateKeyEncoding: {
+                type: "pkcs8",
+                format: "pem",
+                cipher: "aes-256-cbc",
+                passphrase
+            }
+        }
+
+        return new Promise((resolve, reject) => {
+            generateKeyPair('rsa', options, (err: Error, publicKey: string, privateKey: string) => {
+                if (err) return reject(`Error on generate key`)
+                this.keyPair.publicKey = publicKey
+                this.keyPair.privateKey = privateKey
+                resolve({
+                    publicKey: publicKey,
+                    privateKey: privateKey
+                })
+            })
+        })
+
     }
 }

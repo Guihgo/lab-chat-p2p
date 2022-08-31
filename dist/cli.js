@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const inquirer_1 = __importDefault(require("inquirer"));
 const Server_1 = require("./Server");
 const Client_1 = require("./Client");
+const Protocol_1 = require("./Protocol");
 global.__dev = process.argv.find(arg => (arg === "--dev")) ? true : false;
 const cliType = (process.argv[2] || "server").toLowerCase();
 class ChatCLI {
@@ -54,7 +55,7 @@ class ChatCLI {
                     flowlabel: null
                 }
             });
-            yield server.init();
+            server.init();
         });
     }
     initClient() {
@@ -62,30 +63,59 @@ class ChatCLI {
             const params = {
                 address: "127.0.0.1",
                 port: 5535,
-                nickname: "FooBar"
+                nickname: null
             };
             if (!global.__dev) {
                 const input = yield inquirer_1.default.prompt([
                     { type: "input", name: "address", message: "Type the Address [127.0.0.1]:", prefix: Client_1.CHAT_CLIENT_PREFIX },
                     { type: "number", name: "port", message: "Type the Port [5535]:", prefix: Client_1.CHAT_CLIENT_PREFIX },
-                    { type: "input", name: "nickname", message: "Type your nickname:", prefix: Client_1.CHAT_CLIENT_PREFIX },
                 ]);
                 if (input.address !== '')
                     params.address = input.address;
                 if (input.port)
                     params.port = input.port;
-                if (!input.nickname)
-                    throw new Error("Nickname is required.");
             }
+            function inputNickname() {
+                return __awaiter(this, void 0, void 0, function* () {
+                    const { nickname } = yield inquirer_1.default.prompt([
+                        { type: "input", name: "nickname", message: "Type your nickname:", prefix: Client_1.CHAT_CLIENT_PREFIX },
+                    ]);
+                    if (!nickname || nickname === '')
+                        throw new Error("Nickname is required.");
+                    return nickname;
+                });
+            }
+            params.nickname = yield inputNickname();
             const client = new Client_1.ChatClient({
-                socketAddress: {
+                serverAddress: {
                     address: params.address,
                     port: params.port,
                     family: "ipv4",
                     flowlabel: null
-                }
+                },
+                nickname: params.nickname,
+                onAuthError: (e) => __awaiter(this, void 0, void 0, function* () {
+                    if (e === Protocol_1.ERROR_CODE.NICKNAME_ALREADY_TAKEN) {
+                        client.setNickname(yield inputNickname());
+                        client.init();
+                    }
+                }),
+                onLoggedIn: () => __awaiter(this, void 0, void 0, function* () {
+                    const { message } = yield inquirer_1.default.prompt([
+                        { type: "input", name: "message", message: `[${client.config.nickname}]:`, prefix: Client_1.CHAT_CLIENT_PREFIX },
+                    ]);
+                    client.sendMessage(message);
+                    while (1) {
+                        yield client.config.onLoggedIn();
+                    }
+                }),
+                onReceive: (payload) => __awaiter(this, void 0, void 0, function* () {
+                    process.stdout.clearLine(-1);
+                    process.stdout.cursorTo(0);
+                    console.log(`${Client_1.CHAT_CLIENT_PREFIX} ${payload.from}: ${payload.message}`);
+                })
             });
-            yield client.init();
+            client.init();
         });
     }
 }

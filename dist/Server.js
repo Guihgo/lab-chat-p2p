@@ -11,10 +11,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ChatServer = exports.CHAT_SERVER_PREFIX = void 0;
 const net_1 = require("net");
+const Protocol_1 = require("./Protocol");
 exports.CHAT_SERVER_PREFIX = "[Chat::Server]\t";
 class ChatServer {
     constructor(config) {
         this.config = config;
+        this.genesisRoom = {
+            name: "GenesisRoom",
+            clients: {}
+        };
     }
     init() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -30,17 +35,69 @@ class ChatServer {
     }
     onClientError(e, socket) {
         if (["ECONNREFUSED", "ECONNRESET"].includes(e.code)) {
-            setTimeout(() => {
-                console.error(`${exports.CHAT_SERVER_PREFIX} Client ${socket.remoteAddress}:${socket.remotePort} disconnected!`);
-            }, 1000);
+            if (this.genesisRoom.clients[this.getClientId(socket)]) {
+                console.error(`${exports.CHAT_SERVER_PREFIX} Client ${this.genesisRoom.clients[this.getClientId(socket)].nickname}@${socket.remoteAddress}:${socket.remotePort} disconnected!`);
+                delete this.genesisRoom.clients[this.getClientId(socket)];
+            }
+            else {
+                console.error(`${exports.CHAT_SERVER_PREFIX} Client ${socket.remoteAddress}:${socket.remotePort} disconnected without login!`);
+            }
             return;
         }
         console.error(`${exports.CHAT_SERVER_PREFIX} Client Error`, e);
     }
     connectionListener(socket) {
-        console.log(`${exports.CHAT_SERVER_PREFIX} new socket connection from ${socket.remoteAddress}:${socket.remotePort}`);
+        console.log(`${exports.CHAT_SERVER_PREFIX} new client connection from ${socket.remoteAddress}:${socket.remotePort}`);
         socket.on("error", (e) => {
             this.onClientError(e, socket);
+        });
+        socket.on("data", (data) => {
+            // console.log(`${CHAT_SERVER_PREFIX} Data from ${socket.remoteAddress}:${socket.remotePort}`)
+            try {
+                const { operation, payload } = (0, Protocol_1.ParsePayload)(data);
+                switch (operation) {
+                    case Protocol_1.OP.AUTH:
+                        if (!payload.nickname)
+                            throw new Error("No nickname defined.");
+                        this.authClient({
+                            socket,
+                            nickname: payload.nickname,
+                            publicKey: payload.publicKey
+                        });
+                        break;
+                    case Protocol_1.OP.SEND:
+                        this.sendMessage(this.genesisRoom.clients[this.getClientId(socket)].nickname, payload);
+                        break;
+                }
+            }
+            catch (e) {
+                console.error(`${exports.CHAT_SERVER_PREFIX} Client Data Error`, e);
+            }
+        });
+    }
+    getClientId(socket) {
+        return `${socket.remoteAddress}:${socket.remotePort}`;
+    }
+    authClient(client) {
+        const id = this.getClientId(client.socket);
+        if (Object.keys(this.genesisRoom.clients).find(k => (this.genesisRoom.clients[k].nickname === client.nickname))) {
+            console.error(`${exports.CHAT_SERVER_PREFIX} Client ${id} trying to use already taken nickname @${client.nickname}`);
+            client.socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.ERROR, { message: "Nickname already taken", code: Protocol_1.ERROR_CODE.NICKNAME_ALREADY_TAKEN }));
+            return;
+        }
+        this.genesisRoom.clients[id] = client;
+        client.socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.AUTH, { message: `Logged as @${client.nickname} with success!` }));
+        console.log(`${exports.CHAT_SERVER_PREFIX} Client ${client.nickname}@${client.socket.remoteAddress}:${client.socket.remotePort} logged in. Now: ${Object.keys(this.genesisRoom.clients).length} clients.`, Object.keys(this.genesisRoom.clients).map(k => `${this.genesisRoom.clients[k].nickname}@${k}`));
+    }
+    sendMessage(from, { message }) {
+        /* @TODO: add multi room feature here */
+        Object.keys(this.genesisRoom.clients).map(k => this.genesisRoom.clients[k]).forEach((client) => {
+            if (from === client.nickname)
+                return;
+            client.socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.SEND, {
+                from,
+                message
+            }));
         });
     }
 }
