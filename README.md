@@ -8,8 +8,8 @@ A simple chat P2P using NodeJS
 
 ## Feature
 
-1. Auth by unique nickname
-2. P2P Chat
+1. P2P Chat
+2. Auth by unique nickname
 
 ## Reports
 
