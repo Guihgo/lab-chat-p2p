@@ -29,9 +29,7 @@ export declare class ChatServer {
     getClientId(socket: Socket): string;
     getClient(nickname: string): Client;
     authClient(client: Client): void;
-    sendMessage(from: Client["nickname"], { message }: {
-        message: any;
-    }): void;
+    sendMessage(clientId: string, data: any): void;
     handShake(client: Client, payload?: OPHandShakePayload): void;
 }
 export {};

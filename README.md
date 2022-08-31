@@ -10,8 +10,10 @@ A simple chat P2P using NodeJS
 
 1. P2P Chat
 2. Auth by unique nickname
+3. HandShake ( Asymmetric )
+4. Secure & Privacy ( Symmetric cryptography P2P )
 
-## Reports
+## Report
 
 1. [Introduction](/reports/README.md)
 2. [Security](/reports/security.md)

@@ -22,13 +22,13 @@ export declare class ChatClient {
     constructor(config: ClientConfig);
     init(): Promise<void>;
     onServerError(e: any): void;
-    onServerData(data: any): void;
+    onServerData(payload: any): void;
     auth(): Promise<void>;
     setNickname(nickname: ClientConfig["nickname"]): void;
     sendMessage(message: string): void;
     generateKeyPair(): Promise<KeyPair>;
     handShake(payload?: OPHandShakePayload): void;
-    encryptSymetric(op: OP, data: string): void;
+    encryptSymetric(op: OP, data: string): string;
     decryptSymmetric(op: OP, data: string): string;
 }
 export {};

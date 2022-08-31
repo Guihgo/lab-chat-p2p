@@ -27,15 +27,15 @@ export enum ERROR_CODE {
     NICKNAME_ALREADY_TAKEN = "NICKNAME_ALREADY_TAKEN"
 }
 
-export function GetPayload(operation: OP, data: any, ...middlwares: Array<(op: OP, data: string) => string>): Buffer {
+export function GetPayload(operation: OP, data: any, ...middlwares: Array<(op: OP, data: string) => string>): string {
     
-    data = JSON.stringify(data)
+    if (typeof data !== "string") data =  JSON.stringify(data)
     
     middlwares.forEach(middlware => {
         data = middlware(operation, data)
     })
 
-    return Buffer.from(`${operation}=${data}`)
+    return `${operation}=${data}`
 
 
 }
@@ -77,7 +77,7 @@ export function ParsePayload(payload: Buffer, ...middlwares: Array<(op: OP, data
 
         return {
             operation,
-            data: JSON.parse(data)
+            data: (operation === OP.SEND) ? data : JSON.parse(data) 
         }
     } catch (e) {
         throw new Error(e)

@@ -25,7 +25,7 @@ export interface OPHandShakePayload {
 export declare enum ERROR_CODE {
     NICKNAME_ALREADY_TAKEN = "NICKNAME_ALREADY_TAKEN"
 }
-export declare function GetPayload(operation: OP, data: any, ...middlwares: Array<(op: OP, data: string) => string>): Buffer;
+export declare function GetPayload(operation: OP, data: any, ...middlwares: Array<(op: OP, data: string) => string>): string;
 export declare function ParsePayload(payload: Buffer, ...middlwares: Array<(op: OP, data: string) => string>): {
     operation: OP;
     data: any;

@@ -51,25 +51,25 @@ class ChatServer {
         socket.on("error", (e) => {
             this.onClientError(e, socket);
         });
-        socket.on("data", (data) => {
+        socket.on("data", (payload) => {
             // console.log(`${CHAT_SERVER_PREFIX} Data from ${socket.remoteAddress}:${socket.remotePort}`)
             try {
-                const { operation, data: payload } = (0, Protocol_1.ParsePayload)(data);
+                const { operation, data } = (0, Protocol_1.ParsePayload)(payload);
                 switch (operation) {
                     case Protocol_1.OP.AUTH:
-                        if (!payload.nickname)
+                        if (!data.nickname)
                             throw new Error("No nickname defined.");
                         this.authClient({
                             socket,
-                            nickname: payload.nickname,
-                            publicKey: payload.publicKey
+                            nickname: data.nickname,
+                            publicKey: data.publicKey
                         });
                         break;
                     case Protocol_1.OP.SEND:
-                        this.sendMessage(this.genesisRoom.clients[this.getClientId(socket)].nickname, payload);
+                        this.sendMessage(this.getClientId(socket), data);
                         break;
                     case Protocol_1.OP.HANDSHAKE:
-                        this.handShake(this.genesisRoom.clients[this.getClientId(socket)], payload);
+                        this.handShake(this.genesisRoom.clients[this.getClientId(socket)], data);
                         break;
                 }
             }
@@ -95,15 +95,12 @@ class ChatServer {
         client.socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.AUTH, { message: `Logged as @${client.nickname} with success!` }));
         console.log(`${exports.CHAT_SERVER_PREFIX} Client ${client.nickname}@${client.socket.remoteAddress}:${client.socket.remotePort} logged in. Now: ${Object.keys(this.genesisRoom.clients).length} clients.`, Object.keys(this.genesisRoom.clients).map(k => `${this.genesisRoom.clients[k].nickname}@${k}`));
     }
-    sendMessage(from, { message }) {
+    sendMessage(clientId, data) {
         /* @TODO: add multi room feature here */
-        Object.keys(this.genesisRoom.clients).map(k => this.genesisRoom.clients[k]).forEach((client) => {
-            if (from === client.nickname)
+        Object.keys(this.genesisRoom.clients).forEach((cId) => {
+            if (cId === clientId)
                 return;
-            client.socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.SEND, {
-                from,
-                message
-            }));
+            this.genesisRoom.clients[cId].socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.SEND, data));
         });
     }
     handShake(client, payload) {
@@ -118,7 +115,7 @@ class ChatServer {
         /* handshake to first (owner room) to get room key */
         let resolverHandShake = this.genesisRoom.clients[Object.keys(this.genesisRoom.clients)[0]];
         // if (resolverHandShake.nickname === client.nickname) resolverHandShake = this.genesisRoom.clients[Object.keys(this.genesisRoom.clients)[1]]
-        console.log(`${exports.CHAT_SERVER_PREFIX} @${client.nickname} is asking for symetric key. @${resolverHandShake.nickname} will help him!`);
+        console.log(`${exports.CHAT_SERVER_PREFIX} @${client.nickname} is asking for symetric key. @${resolverHandShake.nickname} will help!`);
         resolverHandShake.socket.write((0, Protocol_1.GetPayload)(Protocol_1.OP.HANDSHAKE, { issuer: client.nickname, publicKey: client.publicKey }));
     }
 }

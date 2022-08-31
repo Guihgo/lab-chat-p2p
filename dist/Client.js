@@ -49,21 +49,21 @@ class ChatClient {
         }
         console.error(`${exports.CHAT_CLIENT_PREFIX} Server Error`, e);
     }
-    onServerData(data) {
+    onServerData(payload) {
         // console.log(`${CHAT_CLIENT_PREFIX} Server Data`)
         try {
-            const { operation, data: payload } = (0, Protocol_1.ParsePayload)(data, this.decryptSymmetric.bind(this));
+            const { operation, data } = (0, Protocol_1.ParsePayload)(payload, this.decryptSymmetric.bind(this));
             switch (operation) {
                 case Protocol_1.OP.AUTH:
-                    console.log(`${exports.CHAT_CLIENT_PREFIX} ${payload.message}`);
+                    console.log(`${exports.CHAT_CLIENT_PREFIX} ${data.message}`);
                     if (!this.symmetricKey)
                         this.server.write((0, Protocol_1.GetPayload)(Protocol_1.OP.HANDSHAKE, {}));
                     if (this.config.onLoggedIn)
                         this.config.onLoggedIn();
                     break;
                 case Protocol_1.OP.ERROR:
-                    console.error(`${exports.CHAT_CLIENT_PREFIX} Error. Server says: ${payload.message}`);
-                    switch (payload.code) {
+                    console.error(`${exports.CHAT_CLIENT_PREFIX} Error. Server says: ${data.message}`);
+                    switch (data.code) {
                         case Protocol_1.ERROR_CODE.NICKNAME_ALREADY_TAKEN:
                             this.server.destroy();
                             if (this.config.onAuthError)
@@ -73,10 +73,10 @@ class ChatClient {
                     break;
                 case Protocol_1.OP.SEND:
                     if (this.config.onReceive)
-                        this.config.onReceive(payload);
+                        this.config.onReceive(data);
                     break;
                 case Protocol_1.OP.HANDSHAKE:
-                    this.handShake(payload);
+                    this.handShake(data);
                     break;
             }
         }
@@ -96,7 +96,7 @@ class ChatClient {
         this.config.nickname = nickname;
     }
     sendMessage(message) {
-        this.server.write((0, Protocol_1.GetPayload)(Protocol_1.OP.SEND, { from: this.config.nickname, message }));
+        this.server.write((0, Protocol_1.GetPayload)(Protocol_1.OP.SEND, { from: this.config.nickname, message }, this.encryptSymetric.bind(this)));
     }
     generateKeyPair() {
         const options = {
@@ -136,7 +136,6 @@ class ChatClient {
             return;
         }
         if (payload.issuer && payload.symmetricKey) {
-            // this.roomKey = decryptAssymmetric(payload.symmetricKey)
             const decryptedData = (0, crypto_1.privateDecrypt)({
                 key: this.keyPair.privateKey,
                 passphrase: this.config.passphrase,
@@ -149,15 +148,34 @@ class ChatClient {
         console.log(exports.CHAT_CLIENT_PREFIX, "Generated SymmetricKey: ", this.symmetricKey);
     }
     encryptSymetric(op, data) {
+        if (this.symmetricKey !== null && op === Protocol_1.OP.SEND) {
+            // console.log("symmetric encrypt", data)
+            const key = Buffer.alloc(32, this.symmetricKey);
+            const iv = (0, crypto_1.randomBytes)(12).toString("hex");
+            const cipher = (0, crypto_1.createCipheriv)("aes-256-gcm", key, iv);
+            const dataBuffer = Buffer.from(cipher.update(Buffer.from(data), undefined, "hex"));
+            const finalBuffer = Buffer.from(cipher.final("hex"));
+            const enc = `${iv}:${Buffer.concat([dataBuffer, finalBuffer]).toString()}`;
+            // console.log("symmetric encrypt", enc)
+            return enc;
+        }
+        return data;
     }
     decryptSymmetric(op, data) {
         if (this.symmetricKey !== null && op === Protocol_1.OP.SEND) {
-            console.log("symmetric decrypt");
-            return data;
+            // console.log("symmetric decrypt", data, data.split(":")[1])
+            // data = data.replace(/"/g, '')
+            const key = Buffer.alloc(32, this.symmetricKey);
+            const iv = data.split(":")[0];
+            const decipher = (0, crypto_1.createDecipheriv)("aes-256-gcm", key, iv);
+            data = data.split(":")[1];
+            const dataBuffer = Buffer.from(decipher.update(data, "hex"));
+            // const finalBuffer = Buffer.from(decipher.final())
+            const dec = Buffer.concat([dataBuffer /* , finalBuffer */]).toString();
+            // console.log("symmetric decrypt", dec)
+            return JSON.parse(dec);
         }
-        else {
-            return data;
-        }
+        return data;
     }
 }
 exports.ChatClient = ChatClient;

@@ -13,11 +13,12 @@ var ERROR_CODE;
     ERROR_CODE["NICKNAME_ALREADY_TAKEN"] = "NICKNAME_ALREADY_TAKEN";
 })(ERROR_CODE = exports.ERROR_CODE || (exports.ERROR_CODE = {}));
 function GetPayload(operation, data, ...middlwares) {
-    data = JSON.stringify(data);
+    if (typeof data !== "string")
+        data = JSON.stringify(data);
     middlwares.forEach(middlware => {
         data = middlware(operation, data);
     });
-    return Buffer.from(`${operation}=${data}`);
+    return `${operation}=${data}`;
 }
 exports.GetPayload = GetPayload;
 function ParsePayload(payload, ...middlwares) {
@@ -50,7 +51,7 @@ function ParsePayload(payload, ...middlwares) {
         });
         return {
             operation,
-            data: JSON.parse(data)
+            data: (operation === OP.SEND) ? data : JSON.parse(data)
         };
     }
     catch (e) {
