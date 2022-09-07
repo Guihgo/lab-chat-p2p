@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, generateKeyPair, privateDecrypt, publicEncrypt, randomBytes, RSAKeyPairOptions } from "crypto"
+import { createCipheriv, createDecipheriv, createHmac, createSign, generateKeyPair, privateDecrypt, publicEncrypt, randomBytes, RSAKeyPairOptions, sign } from "crypto"
 import { SocketAddress, Socket } from "net"
 import { ERROR_CODE, GetPayload, OP, OPAuthPayload, OPErrorPayload, OPHandShakePayload, OPSendPayload, ParsePayload } from "./Protocol"
 
@@ -22,9 +22,9 @@ export class ChatClient {
 
     public server: Socket
 
-    protected keyPair : KeyPair = {privateKey: null, publicKey: null}
+    protected keyPair: KeyPair = { privateKey: null, publicKey: null }
 
-    protected symmetricKey : string = null
+    protected symmetricKey: string = null
 
     constructor(public config: ClientConfig) {
         this.config.passphrase = config.passphrase || "private_key_passphrase"
@@ -74,9 +74,8 @@ export class ChatClient {
                     console.log(`${CHAT_CLIENT_PREFIX} ${data.message}`)
                     if (!this.symmetricKey) this.server.write(GetPayload(OP.HANDSHAKE, {} as OPHandShakePayload))
                     if (this.config.onLoggedIn) this.config.onLoggedIn()
-                    
                     break
-                case OP.ERROR: 
+                case OP.ERROR:
                     console.error(`${CHAT_CLIENT_PREFIX} Error. Server says: ${data.message}`)
                     switch ((data as OPErrorPayload).code) {
                         case ERROR_CODE.NICKNAME_ALREADY_TAKEN:
@@ -89,7 +88,7 @@ export class ChatClient {
                     if (this.config.onReceive) this.config.onReceive(data)
                     break
                 case OP.HANDSHAKE:
-                    this.handShake((data as OPHandShakePayload))                    
+                    this.handShake((data as OPHandShakePayload))
                     break
             }
         } catch (e) {
@@ -166,7 +165,7 @@ export class ChatClient {
         console.log(CHAT_CLIENT_PREFIX, "Generated SymmetricKey: ", this.symmetricKey)
     }
 
-    encryptSymetric(op: OP, data: string) : string {
+    encryptSymetric(op: OP, data: string): string {
         if (this.symmetricKey !== null && op === OP.SEND) {
             // console.log("symmetric encrypt", data)
 
@@ -178,33 +177,61 @@ export class ChatClient {
             const finalBuffer = Buffer.from(cipher.final("hex"))
 
             const enc = `${iv}:${Buffer.concat([dataBuffer, finalBuffer]).toString()}`
-            // console.log("symmetric encrypt", enc)
-            return enc
+            const hash = this.hash(data)
+
+            return `${enc},${hash}`
         }
 
         return data
     }
 
-    decryptSymmetric(op: OP, data:string) : string {
+    decryptSymmetric(op: OP, data: string): string {
         if (this.symmetricKey !== null && op === OP.SEND) {
-            // console.log("symmetric decrypt", data, data.split(":")[1])
-            // data = data.replace(/"/g, '')
-
             const key = Buffer.alloc(32, this.symmetricKey)
             const iv = data.split(":")[0]
             const decipher = createDecipheriv("aes-256-gcm", key, iv)
             data = data.split(":")[1]
-            
+
+            const receivedHash = data.split(",")[1]
+            data = data.split(",")[0]
+
             const dataBuffer = Buffer.from(decipher.update(data, "hex"))
-            // const finalBuffer = Buffer.from(decipher.final())
+            /* const finalBuffer = Buffer.from(decipher.final()) */
 
             const dec = Buffer.concat([dataBuffer/* , finalBuffer */]).toString()
 
-            // console.log("symmetric decrypt", dec)
+            /* compare hash's: integrity  */
+            if (receivedHash !== this.hash(dec)) {
+                throw new Error("[Integrity message error] Message was adulterate")
+            }
 
             return JSON.parse(dec)
         }
 
         return data
+    }
+
+    hash(message: Buffer | string) {
+        if (this.symmetricKey === null) throw new Error("Handshake failed.")
+        return createHmac("SHA256", this.symmetricKey).update(message).digest("hex")
+    }
+
+    _testComputerCost() {
+        const messageToSign = Buffer.from("lorem ipsum message here")
+
+        /* digital cert: sign with private key */
+        const time = new Date().getTime()
+        const asymmetricSign = createSign("SHA256")
+        asymmetricSign.write(messageToSign)
+        asymmetricSign.end()
+        const messageSigned = asymmetricSign.sign({ key: this.keyPair.privateKey, passphrase: this.config.passphrase }, "hex")
+        console.log(`Sign time:`, new Date().getTime() - time)
+        console.log(messageSigned)
+
+        /* HMAC: hash-based message authencation code */
+        const _time = new Date().getTime()
+        const hash = createHmac("SHA256", this.keyPair.privateKey).update(messageToSign).digest("hex")
+        console.log(`HMAC time:`, new Date().getTime() - _time)
+        console.log(hash)
     }
 }
